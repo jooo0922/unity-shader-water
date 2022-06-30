@@ -17,14 +17,14 @@
 # /[Aa]ssets/AssetStoreTools*
 
 # Terrain Assets
-/terrain/masks
-/terrain/textures
-/terrain/terrain.fbx
-/terrain/terrain.mat
-/terrain/masks.meta
-/terrain/textures.meta
-/terrain/terrain.fbx.meta
-/terrain/terrain.mat.meta
+/[Aa]ssets/terrain/masks
+/[Aa]ssets/terrain/textures
+/[Aa]ssets/terrain/terrain.fbx
+/[Aa]ssets/terrain/terrain.mat
+/[Aa]ssets/terrain/masks.meta
+/[Aa]ssets/terrain/textures.meta
+/[Aa]ssets/terrain/terrain.fbx.meta
+/[Aa]ssets/terrain/terrain.mat.meta
 
 # Standard Assets related files
 /[Aa]ssets/SampleScenes

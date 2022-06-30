@@ -4,6 +4,9 @@ Shader "Custom/water"
     {
         _BumpMap ("NormalMap", 2D) = "bump" {} // 물 노말맵 텍스쳐를 받아오는 인터페이스 생성을 위해 프로퍼티 추가
         _Cube ("Cubemap", cube) = "" {} // 큐브맵 텍스쳐를 받아오는 인터페이스 생성을 위해 프로퍼티 추가
+        _SPColor("Specular Color", color) = (1, 1, 1, 1) // 스펙큘러 색상을 받아오는 인터페이스 생성을 위해 프로퍼티 추가
+        _SPPower("Specular Power", Range(50, 300)) = 150 // 스펙큘러 광택값(shininess) 을 받아오는 인터페이스 생성을 위해 프로퍼티 추가
+        _SPMulti("Specular Multiply", Range(1, 10)) = 3 // HDR Bloom 기능을 활성화할 때, 매우 강렬한 태양빛 반사를 재현하기 위해 1 이상의 값을 받아서 최종 스펙큘러에 더해줄 때 사용할 값을 받는 인터페이스 추가
     }
     SubShader
     {
@@ -12,11 +15,15 @@ Shader "Custom/water"
         Tags { "RenderType"="Transparent" "Queue"="Transparent"}
 
         CGPROGRAM
-        #pragma surface surf Lambert alpha:fade
+        // 물 셰이더에 하프벡터를 이용한 블린-퐁 스펙큘러를 계산해서 결과값에 더해주는 커스텀 함수 추가
+        #pragma surface surf WaterSpecular alpha:fade
 
 
         sampler2D _BumpMap; // 물 노멀맵 텍스쳐를 담는 샘플러 변수
         samplerCUBE _Cube; // 큐브맵 텍스쳐를 담는 전용 샘플러 변수인 samplerCUBE 선언
+        float4 _SPColor; // 스펙큘러 색상값을 담는 변수
+        float _SPPower; // 스펙큘러 광택값(거듭제곱에 사용)을 담는 변수
+        float _SPMulti; // HDR Bloom 사용 시, 강렬한 태양빛 반사를 재현하기 위해 곱해주는 값을 담는 변수
 
         struct Input
         {
@@ -49,7 +56,14 @@ Shader "Custom/water"
 
         void surf (Input IN, inout SurfaceOutput o)
         {
-            o.Normal = UnpackNormal(tex2D(_BumpMap, IN.uv_BumpMap)); // UnpackNormal() 로 노말맵 텍스쳐로부터 탄젠트 공간 노멀 벡터를 구함.
+            // UnpackNormal() 로 노말맵 텍스쳐로부터 탄젠트 공간 노멀 벡터를 구함.
+            // 이때, 물이 어느 한 방향으로 움직이는게 아닌, 가운데에서 찰랑거리는 느낌을 주기 위해, 동일한 노말맵을 샘플링하는 uv좌표에 각각 
+            // 유니티 내장 시간변수 _Time 을 서로 반대방향으로 더하기 or 빼기 해줌으로써,
+            // 서로 반대방향으로 샘플링하여 움직이는 두 개의 노말맵(처럼 보이지만 원본은 동일한 노말맵)으로부터 노말벡터를 샘플링한 뒤,
+            // 두 노멀의 평균값을 내서 할당하는 방식을 사용할 수 있음. -> 노말맵으로 물 흐름을 표현하는 가장 간단하고 가벼운 방식으로, 실무에서도 많이 사용된다고 함.
+            float3 normal1 = UnpackNormal(tex2D(_BumpMap, IN.uv_BumpMap + _Time.x * 0.1)); 
+            float3 normal2 = UnpackNormal(tex2D(_BumpMap, IN.uv_BumpMap - _Time.x * 0.1));
+            o.Normal = (normal1 + normal2) / 2;
 
             // 큐브맵 텍스쳐로부터 텍셀값을 샘플링함. (샘플링 시 카메라벡터와 노말벡터를 기준으로 역추적한 반사벡터를 사용함.)
             float3 refColor = texCUBE(_Cube, WorldReflectionVector(IN, o.Normal)); // WorldReflectionVector() 내장함수로 월드공간 픽셀 노멀로 변환된 노멀벡터와 카메라벡터로 역추적한 반사벡터를 구함.
@@ -92,6 +106,27 @@ Shader "Custom/water"
             // 전체적으로 투명도를 0.5씩 곱해주고, 1을 넘는 값은 saturate() 함수로 잘라서 o.Alpha 에 할당함.
             // 참고로, saturate 는 0보다 작은 값은 0으로 잘라주고, 1보다 큰 값은 1로 잘라주는 역할임.
             o.Alpha = saturate(rim + 0.5); 
+        }
+
+        // 물 셰이더에 하프벡터를 이용한 블린-퐁 스펙큘러를 계산해서 결과값에 더해주는 커스텀 함수
+        float4 LightingWaterSpecular(SurfaceOutput s, float3 lightDir, float3 viewDir, float atten) {
+            // specular term
+            float3 H = normalize(lightDir + viewDir); // 조명벡터와 뷰벡터 사이의 하프벡터를 구해서 길이를 정규화함.
+            float spec = saturate(dot(H, s.Normal)); // surf 함수에서 계산했던 노멀벡터를 끌어와서 하프벡터와 내적계산을 한 뒤, saturate 로 음수값 제거함. 
+            spec = pow(spec, _SPPower); // 광택값만큼 내적값을 거듭제곱해서 스펙큘러 값을 계산함. (더 큰 광택값으로 거듭제곱할 수록, 스펙큘러 영역이 확 좁아지면서 더욱 쨍한 느낌을 줌)
+
+            // final term
+            float4 finalColor;
+            finalColor.rgb = spec * _SPColor.rgb * _SPMulti; // 인터페이스로부터 입력받는 스펙큘러 색상값 및 HDR Bloom 연동 시 강렬한 태양빛이 구현될 수 있도록 곱해주는 _SPMulti 값을 곱해줌.
+
+            // 물 셰이더의 스펙큘러 적용 시, 투명한 픽셀은 스펙큘러가 아무리 쌔도 알파값이 0에 가깝기 때문에 흐려지게 그려질 수밖에 없음.
+            // 즉, 스펙큘러가 surf 함수에서 계산한 알파값에 영향을 받는다는 소리임.
+            // 이를 위해, s.Alpha 자체에 스펙큘러 값을 더해줌으로써, 
+            // 스펙큘러가 쌘 영역은 surf 에서 계산한 투명도가 아무리 0에 가깝더라도 1까지 끌어올려서
+            // 스펙큘러를 보여줘야 하는 부분은 확실하게 쨍쨍하게 보여줄 수 있도록 한 것!
+            finalColor.a = s.Alpha + spec; 
+
+            return finalColor;
         }
         ENDCG
     }

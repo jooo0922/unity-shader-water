@@ -16,6 +16,16 @@
 # Uncomment this line if you wish to ignore the asset store tools plugin
 # /[Aa]ssets/AssetStoreTools*
 
+# Terrain Assets
+/terrain/masks
+/terrain/textures
+/terrain/terrain.fbx
+/terrain/terrain.mat
+/terrain/masks.meta
+/terrain/textures.meta
+/terrain/terrain.fbx.meta
+/terrain/terrain.mat.meta
+
 # Standard Assets related files
 /[Aa]ssets/SampleScenes
 /[Aa]ssets/Standard Assets
